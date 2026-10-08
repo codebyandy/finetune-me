@@ -1,0 +1,7 @@
+mlx-lm>=0.21.0
+transformers>=4.44.0
+datasets>=2.20.0
+tiktoken>=0.7.0
+tqdm>=4.66.0
+pyyaml>=6.0
+phonenumbers>=8.13.0

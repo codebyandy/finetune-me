@@ -1,0 +1,10 @@
+data/
+adapters/
+models/
+*.jsonl
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+*.log
+wandb/
