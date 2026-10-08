@@ -9,12 +9,15 @@ Usage:
 """
 
 import argparse
+import re
 import sys
 
 MODEL_DEFAULT = "mlx-community/Qwen3-4B-8bit"
 ADAPTER_DEFAULT = "adapters"
 MAX_TOKENS = 256
 TEMP = 0.7
+
+THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 def build_system_prompt(your_name: str, contact: str, channel: str) -> str:
@@ -42,6 +45,7 @@ def main():
 
     try:
         from mlx_lm import load, generate
+        from mlx_lm.sample_utils import make_sampler
     except ImportError:
         sys.exit("mlx-lm not installed. Run: pip install mlx-lm")
 
@@ -99,12 +103,15 @@ def main():
             tokenizer,
             prompt=prompt,
             max_tokens=args.max_tokens,
-            temp=args.temp,
+            sampler=make_sampler(temp=args.temp),
             verbose=False,
         )
 
-        # strip any trailing model turn prefix if present
-        response = response.strip()
+        # strip Qwen3 thinking blocks, speaker prefix, and whitespace
+        response = THINK_RE.sub("", response).strip()
+        prefix = f"{args.your_name}:"
+        if response.startswith(prefix):
+            response = response[len(prefix):].strip()
 
         history.append(("assistant", response))
         print(f"{args.your_name}: {response}\n")

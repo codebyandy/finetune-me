@@ -4,18 +4,18 @@
 model: "mlx-community/Qwen3-4B-8bit"
 train: true
 data: "data/processed"
-batch_size: 4
+batch_size: 2
 iters: 1000
 val_batches: 25
 learning_rate: 1.0e-4
-lora_layers: 16
-lora_rank: 16
+lora_layers: 8
+lora_rank: 8
 lora_scale: 20.0
 lora_dropout: 0.0
-max_seq_length: 1024
+max_seq_length: 512
 grad_checkpoint: true
 adapter_path: "adapters"
 save_every: 100
 steps_per_eval: 100
 # set to "wandb" and install wandb to get loss curves in the browser
-report_to: "none"
+# report_to: "wandb"   # uncomment and install wandb for loss curves
