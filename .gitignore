@@ -2,6 +2,7 @@ data/
 adapters/
 models/
 *.jsonl
+scripts/_slack_data.py
 __pycache__/
 *.py[cod]
 .DS_Store

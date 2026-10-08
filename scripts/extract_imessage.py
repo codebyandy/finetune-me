@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -56,15 +57,67 @@ def is_junk(text: str) -> bool:
     return False
 
 
-def resolve_contact(handle_id: str) -> str:
-    """Best-effort: return handle_id (phone/email) as-is; strip country code for display."""
+def _build_addressbook_cache() -> dict[str, str]:
+    """Query macOS Contacts via osascript. Returns {phone_or_email: display_name}."""
+    script = """
+    tell application "Contacts"
+        set output to ""
+        repeat with p in people
+            set fn to first name of p
+            if fn is missing value then set fn to ""
+            set ln to last name of p
+            if ln is missing value then set ln to ""
+            set fullname to (fn & " " & ln)
+            repeat with ph in phones of p
+                set output to output & (value of ph) & "|" & fullname & "
+"
+            end repeat
+            repeat with em in emails of p
+                set output to output & (value of em) & "|" & fullname & "
+"
+            end repeat
+        end repeat
+        return output
+    end tell
+    """
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=30
+        )
+        cache: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            if "|" not in line:
+                continue
+            raw_id, name = line.split("|", 1)
+            name = name.strip()
+            if not name or name == " ":
+                continue
+            # normalize phone: strip all non-digits then re-key common formats
+            digits = re.sub(r"\D", "", raw_id)
+            if digits:
+                cache[digits] = name
+                cache[digits[-10:]] = name  # last 10 digits
+            cache[raw_id.strip()] = name    # original (for emails)
+        return cache
+    except Exception:
+        return {}
+
+
+def resolve_contact(handle_id: str, ab_cache: dict[str, str] | None = None) -> str:
+    """Return display name from AddressBook cache, falling back to handle_id."""
+    if ab_cache:
+        digits = re.sub(r"\D", "", handle_id)
+        for key in (handle_id, digits, digits[-10:] if len(digits) >= 10 else ""):
+            if key and key in ab_cache:
+                return ab_cache[key].strip() or handle_id
     if handle_id.startswith("+1") and len(handle_id) == 12:
-        digits = handle_id[2:]
-        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+        d = handle_id[2:]
+        return f"({d[:3]}) {d[3:6]}-{d[6:]}"
     return handle_id
 
 
-def extract(db_path: Path) -> list[dict]:
+def extract(db_path: Path, ab_cache: dict | None = None) -> list[dict]:
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
@@ -113,7 +166,7 @@ def extract(db_path: Path) -> list[dict]:
             contact = display_name if display_name else f"group:{chat_id}"
         else:
             channel = "dm"
-            contact = resolve_contact(chat_identifier)
+            contact = resolve_contact(chat_identifier, ab_cache)
 
         # Build a flat list of (role, text) in order
         turns: list[tuple[str, str]] = []
@@ -158,8 +211,12 @@ def main():
         print("Grant Terminal full disk access in System Settings → Privacy & Security.")
         return
 
+    print("Loading AddressBook contacts ...")
+    ab_cache = _build_addressbook_cache()
+    print(f"  resolved {len(ab_cache):,} contact entries")
+
     print(f"Reading {db_path} ...")
-    examples = extract(db_path)
+    examples = extract(db_path, ab_cache=ab_cache)
     print(f"Extracted {len(examples):,} training pairs from iMessage")
 
     if args.dry_run:

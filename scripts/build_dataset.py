@@ -57,6 +57,14 @@ def is_junk_reply(text: str) -> bool:
 
 
 def to_chat_example(record: dict, your_name: str) -> dict | None:
+    # Already formatted (e.g. from parse_mcp_slack.py)
+    if "messages" in record:
+        msgs = record["messages"]
+        reply = next((m["content"] for m in msgs if m["role"] == "assistant"), "")
+        if is_junk_reply(reply):
+            return None
+        return record
+
     contact = record.get("contact", "friend")
     channel = record.get("channel", "chat")
     context = record.get("context", [])
@@ -110,7 +118,8 @@ def main():
             skipped += 1
         else:
             examples.append(ex)
-            source_counts[rec.get("source", "unknown")] += 1
+            src = rec.get("source", "slack" if "messages" in rec else "unknown")
+            source_counts[src] += 1
 
     print(f"  kept: {len(examples):,}  dropped: {skipped:,}")
     for src, count in source_counts.most_common():
